@@ -615,8 +615,12 @@ function buildPasteScript(card) {
   const colors = [card.Color1, card.Color2, card.Color3, card.Color4]
     .filter(Boolean)
     .slice(0, 4);
-  // 3 header lines (Trait + Effect1 + Effect2) -> 3Line; otherwise 2Line.
-  const useThreeLine = !!card.Trait;
+  // Layout selection (which clipping line + which text layers are used):
+  //   "three"  : Trait + Effect2 present -> 3Line, CardName, TraitLine/Effect1Line/Effect2Line
+  //   "twoAlt" : Trait but no Effect2    -> 2Line, CardName2, the "... 2" layers
+  //              (TraitLine 2, Clarify1 2, Effect1Line 2, Clarify2 2)
+  //   "two"    : no Trait                -> 2Line, CardName2, the regular layers
+  const layout = card.Trait && card.Effect2 ? "three" : card.Trait ? "twoAlt" : "two";
 
   return `(function(){
 function find(root,name){
@@ -668,9 +672,15 @@ if(!artDoc)throw Error("Could not find the artwork document.");
 app.activeDocument=template;
 app.preferences.rulerUnits=Units.PIXELS;
 
-var nameLayer=find(template,"CardName");
-if(!nameLayer)throw Error("Card-name text layer (\\"CardName\\") not found.");
-if(nameLayer.kind!==LayerKind.TEXT)throw Error("CardName layer is not a text layer (kind="+nameLayer.kind+") — check the template.");
+var layout=${q(layout)};
+var nameLayerMain=find(template,"CardName");
+var nameLayerAlt=find(template,"CardName2");
+if(!nameLayerMain)throw Error("Card-name text layer (\\"CardName\\") not found.");
+if(layout!=="three"&&!nameLayerAlt)throw Error("Card-name text layer (\\"CardName2\\", used with 2Line) not found.");
+var nameLayer=layout==="three"?nameLayerMain:nameLayerAlt;
+var inactiveName=layout==="three"?nameLayerAlt:nameLayerMain;
+if(inactiveName)inactiveName.visible=false;
+if(nameLayer.kind!==LayerKind.TEXT)throw Error("Card-name layer is not a text layer (kind="+nameLayer.kind+") — check the template.");
 
 var cardCenterX=Number(template.width)/2;
 var trimmedName=String(${q(card.Name)}||"").trim();
@@ -744,12 +754,36 @@ function setHeaderLine(layer,text,center){
     if(center)centerTextLayerHorizontally(layer,cardCenterX);
   }
 }
-setHeaderLine(traitLine,${q(card.Trait)},true);
-setEffectLine(clarify1Line,${q(card.Clarify1)},true);
-setHeaderLine(effect1Line,${q(card.Effect1)},true);
-setEffectLine(clarify2Line,${q(card.Clarify2)},true);
-setHeaderLine(effect2Line,${q(card.Effect2)},true);
-setEffectLine(clarify3Line,${q(card.Clarify3)},true);
+// Alternate text layers for the "Trait + Effect1 only" layout.
+function findAlt(base){
+  return findAny(template,[base+" 2",base+"2",base+"_2"]);
+}
+var traitAlt=findAlt("TraitLine");
+var clarify1Alt=findAlt("Clarify1");
+var effect1Alt=findAlt("Effect1Line");
+var clarify2Alt=findAlt("Clarify2");
+var altLayers=[traitAlt,clarify1Alt,effect1Alt,clarify2Alt];
+var mainLayers=[traitLine,clarify1Line,effect1Line,clarify2Line,effect2Line,clarify3Line];
+
+if(layout==="twoAlt"){
+  if(!traitAlt)throw Error("TraitLine 2 layer not found.");
+  if(!clarify1Alt)throw Error("Clarify1 2 layer not found.");
+  if(!effect1Alt)throw Error("Effect1Line 2 layer not found.");
+  if(!clarify2Alt)throw Error("Clarify2 2 layer not found.");
+  for(var ml=0;ml<mainLayers.length;ml++)mainLayers[ml].visible=false;
+  setHeaderLine(traitAlt,${q(card.Trait)},true);
+  setEffectLine(clarify1Alt,${q(card.Clarify1)},true);
+  setHeaderLine(effect1Alt,${q(card.Effect1)},true);
+  setEffectLine(clarify2Alt,${q(card.Clarify2)},true);
+}else{
+  for(var al=0;al<altLayers.length;al++)if(altLayers[al])altLayers[al].visible=false;
+  setHeaderLine(traitLine,${q(card.Trait)},true);
+  setEffectLine(clarify1Line,${q(card.Clarify1)},true);
+  setHeaderLine(effect1Line,${q(card.Effect1)},true);
+  setEffectLine(clarify2Line,${q(card.Clarify2)},true);
+  setHeaderLine(effect2Line,${q(card.Effect2)},true);
+  setEffectLine(clarify3Line,${q(card.Clarify3)},true);
+}
 
 var cg=findAny(template,["Colors","Color"]);
 if(!cg)throw Error("Colors group not found.");
@@ -780,12 +814,12 @@ for(var pn=1;pn<=4;pn++){
   pGroup.visible=(pn===colorCount);
 }
 
-// --- Art clipping mask: 3Line when the card has a Trait, otherwise 2Line ---
+// --- Art clipping mask: 3Line for the "three" layout, otherwise 2Line ---
 var line2=find(template,"2Line");
 var line3=find(template,"3Line");
 if(!line2)throw Error("2Line clipping layer not found.");
 if(!line3)throw Error("3Line clipping layer not found.");
-var useThree=${useThreeLine ? "true" : "false"};
+var useThree=(layout==="three");
 line3.visible=useThree;
 line2.visible=!useThree;
 
