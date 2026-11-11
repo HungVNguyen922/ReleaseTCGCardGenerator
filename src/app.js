@@ -694,7 +694,7 @@ if(trimmedName.length>0){
 var CLARIFY_MARGIN=60;
 var CLARIFY_BOX_WIDTH=Number(template.width)-(CLARIFY_MARGIN*2);
 var CLARIFY_BOX_HEIGHT=300;
-var CLARIFY_VERTICAL_OFFSET=-10;
+var CLARIFY_VERTICAL_OFFSET=0; // no nudge: keep the vertical position set in the PSD
 
 var bottom=findAny(template,["BottomLine","BottomLin"]);
 if(!bottom)throw Error("Bottom Line group not found.");
@@ -726,8 +726,8 @@ if(!clarify2Line)throw Error("Clarify2 layer not found.");
 if(!effect2Line)throw Error("Effect2Line layer not found.");
 if(!clarify3Line)throw Error("Clarify3 layer not found.");
 
-var headerSize=40;
-var headerLeading=40;
+// Header font size, leading and bold are intentionally NOT set here:
+// they come straight from the PSD text layers.
 
 function setEffectLine(layer,text,center){
   var trimmed=String(text||"").trim();
@@ -748,9 +748,6 @@ function setHeaderLine(layer,text,center){
   layer.visible=trimmed.length>0;
   if(trimmed.length>0){
     layer.textItem.contents=trimmed.toUpperCase();
-    layer.textItem.size=headerSize;
-    layer.textItem.leading=headerLeading;
-    layer.textItem.fauxBold=true;
     if(center)centerTextLayerHorizontally(layer,cardCenterX);
   }
 }
